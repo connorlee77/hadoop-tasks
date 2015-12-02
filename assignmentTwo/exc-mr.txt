@@ -1,0 +1,870 @@
+Note that intermediate step outputs are stored in task_i_helper.out. Final
+output is stored in the folders task_i.out.
+
+Task 1 code begin
+
+Retrieve inverted files large
+hadoop jar /opt/hadoop/hadoop-2.7.1/share/hadoop/tools/lib/hadoop-streaming-2.7.1.jar -D mapreduce.job.name="Task 1" -D mapreduce.job.output.key.comparator.class=org.apache.hadoop.mapreduce.lib.partition.KeyFieldBasedComparator -D stream.num.map.output.key.fields=2 -D mapreduce.partition.keypartitioner.options=-k1,1 -D mapreduce.partition.keycomparator.options="-k1,1 -k2,2 -V" -input $DATA_PATH/task1/large -output $OUTPUT_PATH/task_1_helper.out -mapper mapper.py -file mapper.py -reducer reducer.py -file reducer.py  -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner
+
+
+mapper.py
+import sys
+import os
+
+for line in sys.stdin:  # input from standard input
+    path = os.environ["mapreduce_map_input_file"].split('/')[-1:]
+    line = line.strip().split()
+    
+    for word in line:
+        print("{0}\t{1}".format(word, path[0]))
+
+
+reducer.py
+import sys
+import collections
+prev = ''
+docs = collections.OrderedDict()
+for line in sys.stdin:
+    line = line.strip().split()
+    
+    if line[0] == prev:
+        fileKey = line[1]
+        if fileKey in docs:
+            docs[fileKey] += 1
+        else:
+            docs[fileKey] = 1
+    else:
+        if prev != '':
+            #print out the word + it's files
+            fileList = '{'
+            for key in docs:
+                fileList += '(' + key + ',' + str(docs[key]) + '), '
+            print("{0} : {1} : {2}".format(prev, len(docs), fileList.strip()[:-1] + '}'))
+        prev = line[0]
+        docs = collections.OrderedDict()
+        docs[line[1]] = 1
+#print out the word + it's files
+fileList = '{'
+for key in docs:
+    fileList += '(' + key + ',' + str(docs[key]) + '), '
+print("{0} : {1} : {2}".format(prev, len(docs), fileList.strip()[:-1] + '}'))
+
+
+Sort for abc order:
+hadoop jar /opt/hadoop/hadoop-2.7.1/share/hadoop/tools/lib/hadoop-streaming-2.7.1.jar -D mapreduce.job.name="Task 1" -D mapreduce.job.reduces=1 -D mapreduce.job.output.key.comparator.class=org.apache.hadoop.mapreduce.lib.partition.KeyFieldBasedComparator -D mapreduce.map.output.key.field.separator=: -D stream.num.map.output.key.fields=2 -D mapreduce.partition.keycomparator.options="-k1,1" -input $OUTPUT_PATH/task_1_helper.out -output $OUTPUT_PATH/task_1.out -mapper mapper.py -file mapper.py -reducer reducer.py -file reducer.py -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner
+
+
+mapper.py
+import sys
+    
+for line in sys.stdin:
+    print line.strip()
+
+reducer.py
+import sys
+
+for line in sys.stdin:
+    print line.strip()
+    
+Task 1 code end
+
+Task 1 results begin
+
+" : 2 : {(d11.txt,33), (d7.txt,11)} 
+"'A : 1 : {(d15.txt,3)} 
+"'Abimelech : 1 : {(d1.txt,1)}  
+"'After : 1 : {(d15.txt,1)} 
+"'Ah! : 1 : {(d15.txt,1)}   
+"'Ah!' : 1 : {(d15.txt,1)}  
+"'Ah, : 1 : {(d15.txt,2)}   
+"'Ah,' : 1 : {(d15.txt,1)}  
+"'Alright,' : 1 : {(d2.txt,1)}  
+"'And : 1 : {(d15.txt,3)}
+
+Task 1 results end
+
+
+Task 2 code begin
+
+hadoop jar /opt/hadoop/hadoop-2.7.1/share/hadoop/tools/lib/hadoop-streaming-2.7.1.jar -D mapreduce.job.name="Task 2" -D mapreduce.job.output.key.comparator.class=org.apache.hadoop.mapreduce.lib.partition.KeyFieldBasedComparator -D stream.num.map.output.key.fields=2 -D mapreduce.partition.keypartitioner.options="-k1,1" -D mapreduce.partition.keycomparator.options="-k1,1 -k2,2" -input $DATA_PATH/task1/large -output $OUTPUT_PATH/task_2_helper.out -mapper mapper.py -file mapper.py -reducer reducer.py -file reducer.py -file terms.txt -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner
+
+mapper.py
+import sys
+import os
+
+terms = set()
+for line in file('terms.txt'):
+    terms.add(line.strip())
+
+for line in sys.stdin:
+    path = os.environ["mapreduce_map_input_file"].split('/')[-1:]
+    line = line.strip().split()
+    for word in line:
+        if word in terms:
+            print("{0}\t{1}".format(word, path[0]))    
+
+reducer.py
+import sys
+import collections
+
+def printTermCounts(term, counts):
+    for key in counts:
+        print("{0}\t{1}\t{2}".format(term, key, counts[key]))
+
+termCount = {}
+prevTerm = ''
+for line in sys.stdin:
+    term, fileName = line.strip().split()
+    
+    if term == prevTerm:
+        if fileName in termCount:
+            termCount[fileName] += 1
+        else: 
+            termCount[fileName] = 1
+    else:
+        if prevTerm != '':
+            printTermCounts(prevTerm, termCount)
+        prevTerm = term;
+        termCount = {fileName : 1}
+
+printTermCounts(prevTerm, termCount) 
+
+
+hdfs dfs -count $DATA_PATH/task1/large
+
+hadoop jar /opt/hadoop/hadoop-2.7.1/share/hadoop/tools/lib/hadoop-streaming-2.7.1.jar -D mapreduce.job.name="Task 2" -D mapreduce.job.output.key.comparator.class=org.apache.hadoop.mapreduce.lib.partition.KeyFieldBasedComparator -D stream.num.map.output.key.fields=3 -D mapreduce.partition.keypartitioner.options="-k1,1" -D mapreduce.partition.keycomparator.options="-k1,1" -input $OUTPUT_PATH/task_2_helper.out -output $OUTPUT_PATH/task_2.out -mapper mapper.py -file mapper.py -reducer reducer.py -file reducer.py -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner
+
+
+mapper.py
+import sys
+import os
+
+for line in sys.stdin:
+    print line.strip()
+
+
+reducer.py
+import sys
+import collections
+import math
+
+#Global variables for finding tf-idf of other documents
+N = 17
+DOC = 'd1.txt'
+
+def initTermCount(doc):
+    return {doc : 0, 'other' : 0}
+
+def getScore(scoreParams, doc, n):
+    tf = scoreParams[doc]
+    #If tf is 0, then tf * idf is 0 so adding 1 to scoreParams['other'] is fine
+    idf = math.log10(float(n) / (1 + scoreParams['other'] + 1))
+    
+    return tf * idf
+
+def printScore(term, doc, scoreParams, n):
+    score = getScore(scoreParams, doc, n)
+    print("{0}, {1} = {2}".format(term, doc, score))
+
+scoreParams = initTermCount(DOC)
+prevTerm = ''
+for line in sys.stdin:
+    term, fileName, count = line.strip().split()
+    
+    if term == prevTerm:
+        if fileName in scoreParams:
+            scoreParams[fileName] += int(count)
+        else:
+            scoreParams['other'] += 1
+    else:
+        #calculate score for prevTerm
+        if prevTerm != '':
+            printScore(prevTerm, DOC, scoreParams, N)
+        prevTerm = term
+        scoreParams = initTermCount(DOC)
+        if fileName in scoreParams:
+            scoreParams[fileName] += int(count)
+        else:
+            scoreParams['other'] += 1
+
+printScore(prevTerm, DOC, scoreParams, N)
+
+Task 2 code end
+
+Task 2 results begin
+horse, d1.txt = 2.57155048062   
+agreement, d1.txt = 0.531478917042  
+child, d1.txt = 6.524311868 
+Lassiter, d1.txt = 0.0  
+family, d1.txt = 1.14151090877  
+monument, d1.txt = 0.62838893005
+Task 2 results end
+
+
+Task 3.1 code begin
+
+Parse logs - extract requests
+hadoop jar /opt/hadoop/hadoop-2.7.1/share/hadoop/tools/lib/hadoop-streaming-2.7.1.jar -D mapreduce.job.name="Task 3.1" -D mapreduce.job.reduces=10 -D mapreduce.job.output.key.comparator.class=org.apache.hadoop.mapreduce.lib.partition.KeyFieldBasedComparator -input $DATA_PATH/task2/logsLarge.txt -output $OUTPUT_PATH/task_3.1_helper.out/parsedLogs -mapper mapper.py -file mapper.py -reducer reducer.py -file reducer.py -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner
+
+mapper.py
+import sys
+
+for line in sys.stdin:
+    print line.strip()    
+
+reducer.py
+import sys
+
+def extractLine(line):
+    
+    #Check if line exists
+    if line is None:
+        return
+
+    host = ''
+    rest = ''
+    #handle error if format is incorrect
+    try:
+        host, rest = line.strip().split('- -')
+    except Exception:
+        return 
+    
+    found = False
+    i = 0
+    j = len(rest) - 1
+    while i < j:
+        if rest[i] != '\"':
+            i += 1     
+        if rest[j] != '\"':
+            j -= 1
+        if rest[i] == '\"' and rest[j] == '\"':
+            break
+        if rest[i] == '\"' or rest[j] == '\"':
+            found = True
+    if not found:
+        return    
+    timestamp = ''
+    request = ''
+    reply = ''
+    byte = ''
+    try:
+        timestamp = rest[0 : i - 1].strip()
+        request = rest[i + 1 : j].strip()
+        replyAndBytes = rest[j + 1: ].strip()
+        reply, byte = replyAndBytes.strip().split()
+    except Exception:
+        return
+
+    return (host.strip(), timestamp.strip(), request.strip(), reply.strip(), byte.strip())
+
+def extractRequest(request):
+    return request.strip().split()
+
+for line in sys.stdin:
+    extract = extractLine(line)
+    if extract is not None:
+        fileAccessed = ''
+        try:
+            fileAccessed = extractRequest(extract[2])[1].strip()
+        except IndexError:
+            continue
+        print("{0}".format(fileAccessed))
+    else:
+        continue
+
+
+Sort requests and count
+hadoop jar /opt/hadoop/hadoop-2.7.1/share/hadoop/tools/lib/hadoop-streaming-2.7.1.jar -D mapreduce.job.name="Task 3.1" -D mapreduce.job.output.key.comparator.class=org.apache.hadoop.mapreduce.lib.partition.KeyFieldBasedComparator -D stream.num.map.output.key.fields=2 -D mapreduce.partition.keypartitioner.options="-k1" -D mapreduce.partition.keycomparator.options="-k1" -input $OUTPUT_PATH/task_3.1_helper.out/parsedLogs -output $OUTPUT_PATH/task_3.1_helper.out/aggregate -mapper mapper.py -file mapper.py -reducer reducer.py -file reducer.py -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner
+
+mapper.py
+import sys
+
+for line in sys.stdin:
+    print line.strip()
+
+reducer.py
+import sys
+
+prev = ''
+count = 0
+for line in sys.stdin:
+    line = line.strip()
+    if prev == line: 
+        count += 1    
+    else:
+        if prev != '':
+            print("{0}\t{1}".format(prev, count))
+        prev = line
+        count = 1
+
+print("{0}\t{1}".format(prev, count))
+
+Sort by count and find greatest
+hadoop jar /opt/hadoop/hadoop-2.7.1/share/hadoop/tools/lib/hadoop-streaming-2.7.1.jar -D mapreduce.job.name="Task 3.1" -D mapreduce.job.reduces=1 -D mapreduce.job.reduces=1 -D mapreduce.job.output.key.comparator.class=org.apache.hadoop.mapreduce.lib.partition.KeyFieldBasedComparator -D stream.num.map.output.key.fields=2 -D mapreduce.partition.keypartitioner.options="-k1" -D mapreduce.partition.keycomparator.options="-k2,2nr" -input $OUTPUT_PATH/task_3.1_helper.out/aggregate -output $OUTPUT_PATH/task_3.1.out -mapper mapper.py -file mapper.py -reducer reducer.py -file reducer.py -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner
+
+mapper.py
+import sys
+
+maxLine = ''
+maxCount = 0
+for line in sys.stdin: 
+    line, count = line.strip().split()
+    count = int(count)
+    if count > maxCount:
+        maxCount = count
+        maxLine = line
+print("{0}\t{1}".format(maxLine, maxCount))             
+
+
+reducer.py
+import sys
+
+printed = False
+for line in sys.stdin:
+    if printed is False:
+        print line.strip()
+        printed = True
+
+Task 3.1 code end
+Task 3.1 results begin
+
+/images/NASA-logosmall.gif  97410
+
+Task 3.1 results end
+
+
+
+Task 3.2 code begin
+
+Parse logs - extract 404's
+hadoop jar /opt/hadoop/hadoop-2.7.1/share/hadoop/tools/lib/hadoop-streaming-2.7.1.jar -D mapreduce.job.name="Task 3.2" -D mapreduce.job.reduces=10 -D mapreduce.job.output.key.comparator.class=org.apache.hadoop.mapreduce.lib.partition.KeyFieldBasedComparator -input $DATA_PATH/task2/logsLarge.txt -output $OUTPUT_PATH/task_3.2_helper.out/parsedLogs -mapper mapper.py -file mapper.py -reducer reducer.py -file reducer.py -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner
+
+mapper.py
+import sys
+
+for line in sys.stdin:
+    print line.strip()    
+
+reducer.py
+import sys
+
+def extractLine(line):
+    
+    #Check if line exists
+    if line is None:
+        return
+
+    host = ''
+    rest = ''
+    #handle error if format is incorrect
+    try:
+        host, rest = line.strip().split('- -')
+    except Exception:
+        return 
+    
+    found = False
+    i = 0
+    j = len(rest) - 1
+    while i < j:
+        if rest[i] != '\"':
+            i += 1     
+        if rest[j] != '\"':
+            j -= 1
+        if rest[i] == '\"' and rest[j] == '\"':
+            break
+        if rest[i] == '\"' or rest[j] == '\"':
+            found = True
+    if not found:
+        return    
+    timestamp = ''
+    request = ''
+    reply = ''
+    byte = ''
+    try:
+        timestamp = rest[0 : i - 1].strip()
+        request = rest[i + 1 : j].strip()
+        replyAndBytes = rest[j + 1: ].strip()
+        reply, byte = replyAndBytes.strip().split()
+    except Exception:
+        return
+
+    return (host.strip(), timestamp.strip(), request.strip(), reply.strip(), byte.strip())
+
+
+for line in sys.stdin:
+    extract = extractLine(line)
+    if extract is not None:
+        reply = ''
+        host = ''
+        try:
+            host = extract[0].strip()
+            reply = extract[3].strip()
+        except IndexError:
+            continue
+        if reply == '404':
+            print("{0}\t{1}".format(host, reply))
+
+Sort and count 404's of each host
+hadoop jar /opt/hadoop/hadoop-2.7.1/share/hadoop/tools/lib/hadoop-streaming-2.7.1.jar -D mapreduce.job.name="Task 3.2" -D mapreduce.job.output.key.comparator.class=org.apache.hadoop.mapreduce.lib.partition.KeyFieldBasedComparator -D stream.num.map.output.key.fields=2 -D mapreduce.partition.keypartitioner.options="-k1" -D mapreduce.partition.keycomparator.options="-k1" -input $OUTPUT_PATH/task_3.2_helper.out/parsedLogs -output $OUTPUT_PATH/task_3.2_helper.out/aggregate -mapper mapper.py -file mapper.py -reducer reducer.py -file reducer.py -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner
+
+mapper.py
+import sys
+
+for line in sys.stdin:
+    host, _ = line.strip().split()
+    print("{0}".format(host))
+
+
+reducer.py
+import sys
+
+prev = ''
+count = 0
+for line in sys.stdin:
+    line = line.strip()
+    if prev == line: 
+        count += 1    
+    else:
+        if prev != '':
+            print("{0}\t{1}".format(prev, count))
+        prev = line
+        count = 1
+print("{0}\t{1}".format(prev, count))
+
+Sort and find top 10's
+hadoop jar /opt/hadoop/hadoop-2.7.1/share/hadoop/tools/lib/hadoop-streaming-2.7.1.jar -D mapreduce.job.name="Task 3.2" -D mapreduce.job.output.key.comparator.class=org.apache.hadoop.mapreduce.lib.partition.KeyFieldBasedComparator -D stream.num.map.output.key.fields=2 -D mapreduce.partition.keypartitioner.options="-k1" -D mapreduce.partition.keycomparator.options="-k2,2nr" -input $OUTPUT_PATH/task_3.2_helper.out/aggregate -output $OUTPUT_PATH/task_3.2_helper.out/findGreatest -mapper mapper.py -file mapper.py -reducer reducer.py -file reducer.py -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner
+
+mapper.py
+import sys
+
+for line in sys.stdin: 
+    host, count = line.strip().split()
+    print("{0}\t{1}".format(host, count))
+
+
+reducer.py
+import sys
+
+counter = 0
+for line in sys.stdin:
+    if counter < 10:
+        print line.strip()
+    counter += 1
+
+Sort and find the last top 10
+hadoop jar /opt/hadoop/hadoop-2.7.1/share/hadoop/tools/lib/hadoop-streaming-2.7.1.jar -D mapreduce.job.name="Task 3.2" -D mapreduce.job.reduces=1 -D mapreduce.job.output.key.comparator.class=org.apache.hadoop.mapreduce.lib.partition.KeyFieldBasedComparator -D stream.num.map.output.key.fields=2 -D mapreduce.partition.keypartitioner.options="-k1" -D mapreduce.partition.keycomparator.options="-k2,2nr" -input $OUTPUT_PATH/task_3.2_helper.out/findGreatest -output $OUTPUT_PATH/task_3.2_helper.out/task_3.2.out -mapper mapper.py -file mapper.py -reducer reducer.py -file reducer.py -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner
+
+mapper.py
+import sys
+
+for line in sys.stdin: 
+    host, count = line.strip().split()
+    print("{0}\t{1}".format(host, count))
+
+
+reducer.py
+import sys
+
+counter = 0
+for line in sys.stdin:
+    if counter < 10:
+        print line.strip()
+    counter += 1
+
+Task 3.2 code end
+
+Task 3.2 results begin
+
+dialip-217.den.mmc.com  62
+piweba3y.prodigy.com    47
+155.148.25.4    44
+maz3.maz.net    39
+gate.barr.com   38
+m38-370-9.mit.edu   37
+ts8-1.westwood.ts.ucla.edu  37
+nexus.mlckew.edu.au 37
+204.62.245.32   37
+scooter.pa-x.dec.com    35
+
+Task 3.2 results end
+
+
+
+Task 3.3 code begin
+
+Parse logs - extract timestamps
+hadoop jar /opt/hadoop/hadoop-2.7.1/share/hadoop/tools/lib/hadoop-streaming-2.7.1.jar -D mapreduce.job.name="Task 3.3" -D mapreduce.job.reduces=10 -D mapreduce.job.output.key.comparator.class=org.apache.hadoop.mapreduce.lib.partition.KeyFieldBasedComparator -input $DATA_PATH/task2/logsLarge.txt -output $OUTPUT_PATH/task_3.3_helper.out -mapper mapper.py -file mapper.py -reducer reducer.py -file reducer.py -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner
+
+mapper.py
+import sys
+
+for line in sys.stdin:
+    print line.strip()    
+
+
+reducer.py
+import sys
+import datetime
+import time
+
+def extractLine(line):
+    
+    #Check if line exists
+    if line is None:
+        return
+
+    host = ''
+    rest = ''
+    #handle error if format is incorrect
+    try:
+        host, rest = line.strip().split('- -')
+    except Exception:
+        return 
+    
+    found = False
+    i = 0
+    j = len(rest) - 1
+    while i < j:
+        if rest[i] != '\"':
+            i += 1     
+        if rest[j] != '\"':
+            j -= 1
+        if rest[i] == '\"' and rest[j] == '\"':
+            break
+        if rest[i] == '\"' or rest[j] == '\"':
+            found = True
+    if not found:
+        return    
+    timestamp = ''
+    request = ''
+    reply = ''
+    byte = ''
+    try:
+        timestamp = rest[0 : i - 1].strip()
+        request = rest[i + 1 : j].strip()
+        replyAndBytes = rest[j + 1: ].strip()
+        reply, byte = replyAndBytes.strip().split()
+    except Exception:
+        return
+
+    return (host.strip(), timestamp.strip(), request.strip(), reply.strip(), byte.strip())
+
+
+for line in sys.stdin:
+    extract = extractLine(line)
+    if extract is not None:
+        reply = ''
+        host = ''
+        try:
+            host = extract[0].strip()
+            timestamp = extract[1].strip()[1:-6].strip()
+            dt = datetime.datetime.strptime(timestamp, "%d/%b/%Y:%H:%M:%S").strftime('%s')
+            
+        except IndexError:
+            continue
+        print("{0}\t{1}".format(host, dt))
+
+Sort by host name and unix timestamp
+hadoop jar /opt/hadoop/hadoop-2.7.1/share/hadoop/tools/lib/hadoop-streaming-2.7.1.jar -D mapreduce.job.name="Task 3.3" -D mapreduce.job.output.key.comparator.class=org.apache.hadoop.mapreduce.lib.partition.KeyFieldBasedComparator -D stream.num.map.output.key.fields=2 -D mapreduce.partition.keypartitioner.options="-k1,1" -D mapreduce.partition.keycomparator.options="-k1,1 -k2,2n" -input $OUTPUT_PATH/task_3.3_helper.out -output $OUTPUT_PATH/task_3.3.out -mapper mapper.py -file mapper.py -reducer reducer.py -file reducer.py -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner
+
+mapper.py
+import sys
+
+for line in sys.stdin:
+    host, seconds = line.strip().split()
+    print("{0}\t{1}".format(host, seconds))
+
+
+reducer.py
+import sys
+import datetime
+
+
+def printTime(lastTime, firstTime, prev):
+    
+    last = int(lastTime)
+    first = int(firstTime)
+
+    tLast = datetime.datetime.fromtimestamp(last)
+    tFirst = datetime.datetime.fromtimestamp(first)
+    if last != 0:
+        print("{0}\t{1}".format(prev, (tLast - tFirst).seconds))
+    else:
+        print("{0}\t{1}".format(prev, tFirst.strftime("%d/%b/%Y:%H:%M:%S -0400"))) 
+
+firstTime = '0'
+prev = ''
+lastTime = '0'
+for line in sys.stdin:
+    host, seconds = line.strip().split()
+    
+    if host == prev:
+        lastTime = seconds
+    else:
+ 
+        if prev != '':   
+            printTime(lastTime, firstTime, prev)
+        
+        prev = host
+        firstTime = seconds
+        lastTime = '0'
+      
+printTime(lastTime, firstTime, prev)
+
+Task 3.3 code end
+
+Task 3.3 results begin
+
+02-17-05.comsvc.calpoly.edu 182
+1.ts2.mnet.medstroms.se 81987
+101.irri.cgiar.org  45
+12-102md.acs.calpoly.edu    1112
+12-105da.acs.calpoly.edu    799
+12.ts1.mnet.medstroms.se    09/Aug/1995:04:37:50 -0400
+121.27.inmarsat.org 12
+128.100.83.132  2
+128.100.87.74   42
+128.100.95.2    13/Aug/1995:13:59:50 -0400
+
+Task 3.3 results end
+
+
+
+
+Task 4.1 code begin
+
+hadoop jar /opt/hadoop/hadoop-2.7.1/share/hadoop/tools/lib/hadoop-streaming-2.7.1.jar -D mapreduce.job.name="Task 4.1" -D mapreduce.job.output.key.comparator.class=org.apache.hadoop.mapreduce.lib.partition.KeyFieldBasedComparator -D stream.num.map.output.key.fields=2 -D mapreduce.partition.keypartitioner.options=-k1,1 -D mapreduce.partition.keycomparator.options="-k2,2nr" -input $DATA_PATH/task3/stackLarge.txt -output $OUTPUT_PATH/task_4.1_helper.out -mapper mapper.py -file mapper.py -reducer reducer.py -file reducer.py -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner
+
+mapper.py
+import sys
+import xml.etree.ElementTree as ET
+
+for line in sys.stdin:  # input from standard input
+    root = ET.fromstring(line.strip())
+    attrs = root.attrib
+    fID, fVAL = '', ''
+    try:
+        fID = attrs['id'] if 'id' in attrs else attrs['Id']
+        fVAL = attrs['posttypeid'] if 'posttypeid' in attrs else attrs['PostTypeId']
+    except KeyError:
+        continue    
+    if fVAL == '1':
+        fView = attrs['viewcount'] if 'viewcount' in attrs else attrs['ViewCount']
+        print("{0}\t{1}".format(fID, fView))
+
+
+reducer.py
+import sys
+
+count = 0
+for line in sys.stdin:
+    if count < 10:
+        print line.strip()      
+    count += 1
+
+hadoop jar /opt/hadoop/hadoop-2.7.1/share/hadoop/tools/lib/hadoop-streaming-2.7.1.jar -D mapreduce.job.name="Task 4.1" -D mapreduce.job.reduces=1 -D mapreduce.job.output.key.comparator.class=org.apache.hadoop.mapreduce.lib.partition.KeyFieldBasedComparator -D stream.num.map.output.key.fields=2 -D mapreduce.partition.keypartitioner.options=-k1,1 -D mapreduce.partition.keycomparator.options="-k2,2nr" -input $OUTPUT_PATH/task_4.1_helper.out -output $OUTPUT_PATH/task_4.1.out -mapper mapper.py -file mapper.py -reducer reducer.py -file reducer.py -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner
+
+mapper.py
+import sys
+
+for line in sys.stdin:
+    print line.strip()
+
+
+reducer.py
+import sys
+
+count = 0
+for line in sys.stdin:
+    if count < 10:
+        print line.strip()      
+    count += 1
+
+Task 4.1 code end
+
+Task 4.1 results begin
+
+184618  1782717
+503093  1240007
+25969   1075873
+194812  1058604
+426258  989328
+363681  978463
+114543  962440
+134845  938463
+306583  913899
+63447   868645
+
+Task 4.1 results end
+
+
+
+
+Task 4.2 code begin
+
+hadoop jar /opt/hadoop/hadoop-2.7.1/share/hadoop/tools/lib/hadoop-streaming-2.7.1.jar -D mapreduce.job.name="Task 4.2" -D mapreduce.job.output.key.comparator.class=org.apache.hadoop.mapreduce.lib.partition.KeyFieldBasedComparator -D stream.num.map.output.key.fields=2 -D mapreduce.partition.keypartitioner.options=-k2,2 -D mapreduce.partition.keycomparator.options="-k2,2n" -input $DATA_PATH/task3/stackLarge.txt -output $OUTPUT_PATH/task_4.2_helper.out -mapper mapper.py -file mapper.py -reducer reducer.py -file reducer.py -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner
+
+mapper.py
+import sys
+import xml.etree.ElementTree as ET
+
+for line in sys.stdin:  # input from standard input
+    root = ET.fromstring(line.strip())
+    attrs = root.attrib
+    fID, fVAL = '', ''
+    try:
+        fID = attrs['ParentId']
+        fVAL = attrs["PostTypeId"]
+        fView = attrs['OwnerUserId']
+    except KeyError:
+        continue    
+    if fVAL == '2':
+        print("{0}\t{1}".format(fID, fView))
+
+
+reducer.py
+import sys
+
+prevOwner = ''
+postIDS = []
+for line in sys.stdin:
+    postID, owner = line.strip().split()
+    
+    if owner == prevOwner:
+        postIDS.append(postID)
+    else:
+        if prevOwner != '':
+            print("{0}\t{1}\t{2}".format(prevOwner, len(postIDS), str(map(int, postIDS)).strip('[]')))
+        prevOwner = owner
+        postIDS = [postID]
+print("{0}\t{1}\t{2}".format(owner, len(postIDS), str(map(int, postIDS)).strip('[]')))
+
+hadoop jar /opt/hadoop/hadoop-2.7.1/share/hadoop/tools/lib/hadoop-streaming-2.7.1.jar -D mapreduce.job.name="Task 4.2" -D mapreduce.job.reduces=1 -D mapreduce.job.output.key.comparator.class=org.apache.hadoop.mapreduce.lib.partition.KeyFieldBasedComparator -D stream.num.map.output.key.fields=3 -D mapreduce.partition.keypartitioner.options=-k1,3 -D mapreduce.partition.keycomparator.options="-k2,2nr" -input $OUTPUT_PATH/task_4.2_helper.out -output $OUTPUT_PATH/task_4.2.out -mapper mapper.py -file mapper.py -reducer reducer.py -file reducer.py -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner
+
+mapper.py
+import sys
+
+for line in sys.stdin:
+    owner, ct, arr = line.strip().split('\t')
+    print('{0}\t{1}\t{2}'.format(owner, ct, arr))
+
+
+reducer.py
+import sys
+
+count = 0
+for line in sys.stdin:
+    if count == 0:
+        owner, ct, arr = line.strip().split('\t')
+        print("{0} -> {1}".format(owner, arr))
+    count += 1
+
+Task 4.2 code end
+
+
+Task 4.2 results begin
+22656 -> 411592, 485240, 379041, 403058, 487682, 374734, 380081, 411579, 443936, 370920, 515787, 484212, 462699, 470944, 413597, 493311, 460404, 406361, 490677, 385809, 439166, 403088, 449760, 445984, 438188, 519929, 394957, 393701, 456935, 385730, 490860, 465627, 406351, 384633, 388353, 490850, 394898, 511921, 394921, 424586, 396009, 462697, 367626, 490896, 490728, 442924, 398170, 516463, 480389, 396005, 457128, 392135, 465706, 405600, 388642, 436716, 524483, 460371, 510319, 493494, 480319, 406830, 401415, 431785, 406791, 464852, 521687, 440204, 385688, 512266, 480263, 425132, 406293, 507747, 503139, 476422, 380274, 374398, 476676, 406760, 519914, 443687, 420895, 516399, 370831, 401232, 371702, 410417, 482466, 445915, 476534, 432833, 439255, 417039, 386493, 442265, 473087, 516569, 388365, 412763, 420867, 411572, 370938, 470789, 410692, 493490, 520527, 406850, 457287, 485398, 503427, 385709, 401348, 433475, 388375, 453538, 460364, 510376, 406253, 402936, 431091, 390108, 480033, 489485, 462348, 482560, 516882, 374790, 433188, 428617, 442245, 495616, 483702, 480007, 451228, 488808, 445883, 380451, 423794, 470724, 386088, 420774, 371930, 380512, 479966, 446262, 462311, 383775, 479883, 510214, 465313, 472488, 439298, 374316, 464941, 384262, 385714, 443935, 475843, 510477, 434888, 366345, 511378, 392083, 520280, 205138, 453479, 380198, 439617, 487485, 373541, 446303, 386500, 436700, 524066, 520290, 398212, 385688, 525413, 462167, 424743, 425988, 484562, 370820, 457482, 493673, 386183, 427217, 475825, 446320, 495471, 439086, 493947, 475794, 462793, 454870, 370801, 434761, 420646, 469657, 487441, 424760, 520030, 420623, 396143, 453451, 450820, 420617, 425226, 443980, 507649, 423840, 506648, 392787, 439302, 389993, 456786, 452281, 504500, 418983, 489258, 496096, 443239, 367814, 510863, 464831, 516309, 398117, 479565, 385841, 511477, 420541, 384247, 409611, 388718, 408452, 365489, 427363, 439974, 367905, 524503, 466799, 443310, 412839, 423865, 461988, 452296, 387198, 415291, 493177, 454891, 468062, 453738, 434890, 447408, 411631, 399760, 515631, 462879, 514953, 375940, 491375, 412864, 462793, 453359, 380595, 372087, 417039, 372075, 424775, 380626, 433106, 446462, 489304, 476049, 495273, 444008, 514948, 409716, 446474, 504645, 516617, 491646, 446483, 374262, 388708, 455420, 495228, 365615, 449002, 366332, 461893, 480973, 399648, 429890, 515269, 431311, 489317, 457970, 399768, 512401, 380632, 396191, 455409, 491735, 486749, 523359, 414896, 388431, 524351, 466560, 409727, 392266, 400022, 510341, 460562, 380639, 374535, 388439, 460576, 524062, 375881, 500431, 390900, 380665, 523194, 366897, 481068, 414328, 516637, 450617, 411500, 515975, 385893, 436807, 386741, 468266, 479105, 409765, 473998, 491780, 423247, 377218, 471693, 378259, 525364, 442022, 479081, 513234, 411515, 503218, 481122, 414290, 465238, 400900, 408310, 464889, 421851, 409807, 498636, 400100, 482986, 495004, 444909, 525319, 400861, 446663, 399770, 395232, 400866, 384511, 431967, 374215, 474057, 443170, 464874, 474184, 520922, 478968, 443000, 519675, 411517, 426505, 468273, 446706, 395314, 470311, 472137, 523624, 446702, 385913, 459560, 507936, 463029, 417039, 507343, 408101, 468832, 483054, 434737, 421801, 458225, 474259, 427725, 519645, 399798, 409846, 417699, 453186, 516964, 453163, 463302, 499210, 516160, 455237, 474315, 443010, 413095, 377245, 496704, 481211, 375544, 409852, 459554, 427756, 493033, 402430, 380755, 402517, 516788, 458460, 427799, 497699, 380775, 481725, 459538, 407983, 504103, 461475, 521505, 503263, 386544, 383551, 370501, 419952, 506807, 446835, 458518, 474450, 451647, 421797, 500508, 461439, 474451, 519631, 463419, 384489, 389813, 453820, 396621, 489173, 433526, 371604, 370401, 481846, 435729, 438715, 454218, 367577, 389822, 476217, 411478, 385949, 481334, 481314, 412380, 368806, 448653, 368170, 419954, 510949, 386341, 487258, 520064, 506092, 500832, 476163, 474535, 442019, 502430, 474564, 375014, 454250, 370852, 383735, 374553, 464471, 380885, 448629, 451004, 412435, 439541, 406433, 499393, 409969, 483215, 516689, 385966, 504367, 486420, 374940, 388775, 508026, 371987, 502415, 488601, 424443, 468372, 460300, 450350, 513335, 466841, 464731, 519324, 453451, 424920, 391462, 524428, 452120, 468388, 468914, 419788, 434039, 419796, 410026, 522222, 466946, 453059, 474841, 427902, 368832, 478167, 370707, 393169, 478150, 386584, 378856, 453023, 427909, 524567, 431203, 397760, 436759, 478135, 439897, 451035, 374651, 450410, 512166, 384401, 524495, 525425, 483333, 486948, 506295, 411447, 413311, 443403, 514564, 503996, 393152, 436954, 371026, 427941, 428924, 401945, 391557, 379282, 469982, 453879, 477965, 374934, 428896, 417878, 406463, 492454, 405288, 427980, 405333, 378118, 388822, 460698, 405336, 434626, 405352, 466565, 477101, 515590, 386017, 503789, 439814, 440016, 519515, 389426, 503877, 428001, 371398, 443466, 414746, 442425, 477351, 374673, 405379, 371418, 372639, 374014, 492539, 477750, 417954, 372033, 418064, 375831, 430145, 460733, 519520, 450463, 508054, 367823, 497508, 448158, 486784, 405429, 450474, 366852, 407402, 509193, 469899, 452743, 438492, 431839, 419554, 517751, 448320, 413825, 447186, 487065, 451078, 502346, 520400, 477399, 442678, 503898, 436736, 511093, 519484, 512527, 523431, 519461, 496472, 460755, 387893, 437026, 460846, 514833, 393322, 481714, 503383, 438431, 451099, 524081, 414749, 434666, 443423, 398378, 452902, 407255, 513672, 508085, 448258, 448206, 430403, 460223, 460815, 493388, 487046, 508126, 516768, 470984, 139837, 149211, 157354, 188141, 185987, 178888, 187576, 153573, 156369, 193731, 142003, 194165, 178976, 178516, 187983, 161942, 162007, 178333, 161822, 156430, 186007, 154112, 190227, 148298, 162112, 161633, 186082, 190299, 178255, 143997, 195606, 186115, 144176, 192599, 162303, 174585, 187602, 193873, 178188, 144516, 174662, 162335, 155458, 154463, 174498, 197302, 161556, 176106, 197297, 194304, 9033, 168169, 168393, 159705, 174155, 183685, 188184, 197241, 176196, 187414, 144783, 148074, 183473, 155378, 161477, 145371, 168150, 197182, 183479, 176264, 187633, 197174, 176267, 155780, 187289, 148078, 162571, 139260, 154489, 178026, 181427, 161432, 162696, 197482, 157055, 155260, 162727, 183367, 188864, 186385, 188977, 173272, 173080, 186467, 181643, 162879, 186523, 186527, 141467, 186600, 137688, 183315, 161231, 190376, 191153, 192121, 187742, 191151, 183856, 188769, 137448, 197005, 187989, 139592, 196094, 163183, 164643, 177835, 177836, 148882, 141423, 186653, 194436, 183250, 177506, 194450, 186643, 196936, 151936, 137454, 164468, 157198, 155209, 164425, 161184, 139592, 152613, 185072, 157219, 194464, 149233, 152900, 187068, 171717, 188693, 188688, 145509, 194496, 154680, 171664, 171332, 194528, 164369, 185690, 185124, 191333, 179337, 164144, 183033, 188120, 169378, 169220, 156815, 182440, 153048, 186964, 186891, 157557, 187695, 182600, 145856, 177538, 157254, 164192, 152313, 188134, 143947, 146155, 182683, 194676, 177363, 177373, 131871, 146358, 188510, 190936, 182749, 146204, 154483, 154551, 556006, 586037, 555796, 605891, 556133, 595279, 629758, 555799, 651055, 605526, 626196, 657503, 605533, 630045, 605498, 590231, 556203, 646742, 625687, 605441, 555750, 605417, 527685, 591507, 625640, 625611, 556265, 629712, 565095, 651419, 556310, 586087, 552612, 526246, 659148, 541936, 605215, 534793, 625513, 653730, 630464, 626187, 572647, 565075, 585969, 537174, 527766, 564961, 625465, 630605, 653738, 657573, 644342, 644089, 649471, 583944, 630808, 556510, 556526, 651283, 597590, 551589, 535720, 625340, 595399, 556616, 576660, 585860, 551406, 631088, 576740, 631099, 576678, 564935, 654592, 653674, 534807, 626328, 573194, 609293, 589967, 653882, 533042, 586436, 564938, 608542, 540248, 551173, 609501, 586116, 551142, 653634, 576979, 573231, 576912, 589966, 631484, 551111, 528999, 529088, 657664, 631499, 608530, 631550, 657685, 577132, 631651, 653596, 589943, 564816, 654664, 557112, 631825, 564557, 585725, 534846, 577280, 651032, 589870, 608525, 577358, 631919, 557159, 606109, 550702, 648196, 651399, 564699, 577403, 631994, 577427, 542915, 643775, 657735, 604252, 593730, 632148, 536971, 654715, 535531, 552844, 550571, 609963, 573325, 650898, 571265, 550536, 610026, 643694, 528372, 550143, 629411, 654752, 646750, 552857, 632383, 632399, 535972, 647403, 647413, 608453, 610001, 533464, 540430, 531315, 653469, 593808, 624217, 632570, 632606, 531151, 591144, 552909, 624176, 577749, 610199, 610229, 527953, 624116, 649428, 647425, 577868, 566167, 603727, 623990, 586193, 646779, 615377, 647427, 649962, 595110, 654802, 595762, 573384, 533902, 549755, 655803, 558010, 649320, 549701, 540634, 528122, 578152, 549606, 615334, 575217, 578211, 578231, 553035, 575173, 595810, 566185, 534718, 647453, 549382, 549274, 525711, 628843, 575202, 643422, 610603, 548007, 585406, 585372, 540708, 633585, 533171, 610458, 648188, 527819, 623451, 633656, 542770, 591632, 585344, 648700, 610732, 647499, 610743, 540876, 654858, 573439, 585306, 564303, 610818, 531380, 610870, 527259, 623242, 623243, 623159, 654906, 627507, 540947, 648692, 649773, 570578, 646794, 570560, 615168, 532588, 574972, 589774, 626707, 570535, 653154, 634664, 606524, 634693, 589737, 634727, 570471, 651462, 570452, 622763, 529999, 534690, 643050, 634777, 622743, 634829, 622710, 531520, 611295, 536798, 602326, 570376, 648160, 655751, 602279, 591273, 606636, 566411, 547946, 570338, 573539, 570302, 586262, 566418, 615105, 566437, 585031, 538121, 642933, 570231, 648732, 574868, 527234, 601974, 596065, 579676, 559254, 559274, 606642, 601804, 656072, 635640, 573584, 593026, 570153, 601674, 535572, 570123, 584549, 611433, 533831, 635841, 635915, 538281, 586284, 601497, 533426, 574824, 601436, 636046, 596339, 657318, 574809, 596367, 569903, 574787, 569877, 626889, 553536, 648115, 541487, 569714, 532816, 636266, 573621, 626910, 626924, 573655, 538305, 533767, 626935, 596465, 657263, 608057, 573692, 580590, 531759, 612058, 588319, 569614, 590991, 560123, 608028, 618535, 606902, 580257, 559779, 569522, 621633, 612178, 569525, 574019, 580867, 580887, 612253, 651803, 600651, 580896, 592933, 594923, 580905, 600607, 596549, 600525, 566655, 544249, 612283, 651350, 648003, 645836, 612486, 645826, 637672, 586352, 581318, 569245, 581343, 592934, 533332, 533858, 614713, 545885, 612592, 581405, 655657, 600022, 637960, 599976, 581448, 586363, 606997, 638038, 612689, 569109, 638115, 531976, 592824, 644715, 612722, 638142, 612753, 545671, 581590, 638171, 656431, 553857, 638216, 648553, 638222, 538426, 594208, 581714, 581722, 568852, 590122, 527947, 581730, 545457, 573882, 642123, 651682, 655289, 545421, 647779, 594230, 642103, 620546, 620534, 594268, 568780, 645678, 620484, 568724, 642058, 533881, 568751, 627172, 561365, 614542, 532935, 553905, 620376, 655328, 638701, 581949, 591951, 581967, 648814, 642005, 544449, 582095, 568671, 638828, 656373, 586422, 568616, 561528, 544991, 647815, 620234, 582122, 628119, 657112, 638881, 620198, 561601, 607130, 618148, 628049, 658506, 582287, 582284, 620024, 639166, 561762, 656325, 554767, 627267, 641931, 627982, 561853, 639292, 554159, 561891, 639320, 619912, 627315, 618190, 618182, 533379, 589351, 619856, 641911, 582550, 652512, 542766, 618216, 641906, 535328, 582575, 598702, 645533, 658614, 598640, 619716, 582725, 536449, 594378, 618267, 658644, 554276, 618276, 538695, 618292, 656564, 536435, 619434, 619448, 613699, 590162, 554044, 658654, 592064, 538729, 533872, 583123, 641727, 640307, 640302, 597012, 640415, 619197, 597819, 619162, 554345, 640464, 640502, 607587, 543473, 640522, 648576, 607377, 619087, 526555, 534531, 619033, 583414, 640613, 640651, 543318, 618966, 543263, 658868, 627742, 627730, 659529, 584134, 618909, 597788, 533922, 627478, 618878, 657037, 566860, 536396, 536378, 618835, 597675, 629804, 605859, 626115, 586042, 573050, 605828, 629910, 626058, 626139, 555929, 605726, 605682, 573026, 644267, 555871, 552472, 629955, 629798, 552421, 555982, 625947, 625928, 626132, 278703, 290527, 208969, 355282, 208876, 208835, 355787, 290304, 355340, 208381, 208753, 290227, 290238, 208532, 355620, 290189, 255976, 254273, 254260, 256065, 256077, 254099, 254096, 254099, 314779, 313584, 254037, 254009, 253993, 253937, 255098, 365086, 253757, 253780, 285238, 315139, 253673, 315146, 253664, 253549, 253492, 253468, 253460, 315358, 312471, 253399, 364986, 253226, 253211, 285292, 256566, 253058, 312103, 312184, 252893, 252817, 252793, 252775, 252751, 252257, 198419, 198543, 284678, 257052, 316548, 257045, 316532, 316582, 252014, 251987, 251946, 316656, 316674, 251937, 251868, 316727, 316855, 257251, 316911, 317026, 317047, 317084, 257331, 311710, 311363, 317134, 285523, 257462, 257519, 317335, 317462, 317606, 317619, 317788, 317816, 258120, 258204, 284093, 255063, 284336, 258285, 258339, 317825, 318775, 258486, 258567, 285793, 364155, 258691, 285846, 258988, 364009, 319864, 319789, 284063, 309939, 313910, 309734, 320396, 309706, 247621, 320542, 309631, 247455, 247241, 309553, 259676, 309496, 363569, 259726, 363596, 320767, 259751, 200079, 320814, 363549, 309286, 200079, 200151, 321096, 259887, 259900, 309161, 259929, 200239, 309071, 308986, 308954, 246572, 321418, 321423, 246495, 246498, 255553, 321549, 321566, 246389, 283749, 246270, 200319, 246112, 308683, 246108, 246096, 245607, 283763, 246038, 308427, 245058, 244881, 244949, 283679, 283669, 323032, 200574, 323079, 244826, 308061, 244811, 261028, 261062, 244772, 307984, 323212, 323230, 323235, 261126, 261086, 255341, 261177, 200691, 200689, 283487, 314008, 362955, 200755, 200785, 283511, 244192, 261387, 261428, 244135, 283513, 243811, 324066, 324053, 286399, 362740, 324341, 243379, 261809, 283487, 283492, 254784, 362719, 283476, 324604, 324656, 243045, 324670, 324727, 242930, 262089, 242904, 262110, 262096, 286508, 242745, 242718, 286481, 242695, 325156, 242614, 362632, 242577, 325267, 242438, 242517, 255341, 242400, 201255, 242393, 362555, 242264, 242225, 283374, 262480, 325524, 325511, 325561, 262469, 262367, 262547, 286533, 262618, 325725, 286605, 286632, 241537, 362441, 362424, 326098, 262887, 241470, 241405, 201440, 241336, 326223, 283241, 263023, 306212, 241238, 241238, 241148, 263151, 241134, 240836, 314033, 362278, 306085, 305911, 326390, 362326, 263191, 201479, 326648, 240863, 240837, 240638, 326757, 362224, 240258, 326820, 263347, 263400, 283143, 240219, 305755, 201616, 240122, 327286, 305651, 201607, 263614, 240090, 327332, 240047, 362150, 362124, 305519, 327460, 239905, 239888, 239865, 362111, 362112, 305393, 362059, 239645, 362042, 305358, 305244, 327916, 239306, 239202, 305140, 305154, 304967, 304859, 255644, 238675, 238660, 304816, 238606, 238583, 304782, 304770, 264196, 264496, 238555, 238547, 238490, 238413, 264575, 201930, 304640, 264617, 329029, 329129, 264718, 201933, 329203, 254784, 304488, 287037, 304483, 304389, 237159, 237377, 255645, 264984, 265106, 265097, 265147, 265208, 237041, 330155, 236878, 236861, 287142, 236676, 202271, 265370, 330318, 236676, 236676, 313753, 330502, 287178, 265585, 330622, 265639, 287195, 330963, 235003, 331217, 314100, 303502, 265849, 361371, 282317, 282468, 235446, 265919, 235455, 314108, 235250, 235025, 266115, 235003, 266292, 234994, 234990, 266308, 234591, 234379, 234341, 234239, 234059, 266716, 266776, 234008, 233905, 233850, 266818, 266825, 266901, 233711, 266923, 233579, 233475, 333151, 302476, 333242, 233382, 233288, 233243, 267059, 233207, 302371, 233216, 267076, 333364, 333280, 233081, 302303, 233123, 233013, 333655, 302157, 333737, 232863, 333736, 302096, 232781, 333829, 232748, 232732, 302037, 302032, 232535, 301965, 232558, 333953, 232545, 301960, 287551, 334179, 301809, 287592, 267765, 334415, 267830, 282099, 287598, 301618, 334579, 282086, 231767, 334658, 268018, 268013, 231741, 301510, 334779, 287663, 301354, 334838, 301365, 285177, 301393, 287684, 282028, 282037, 231525, 287646, 231480, 268251, 268321, 281970, 268393, 230869, 231159, 230454, 335450, 268530, 335517, 268513, 281933, 268652, 268671, 335807, 314203, 360241, 360234, 269058, 300499, 360151, 203863, 300489, 287899, 229886, 336387, 336414, 300376, 300402, 229886, 359935, 229844, 269303, 229797, 269310, 360111, 336649, 229656, 229554, 336755, 229508, 336781, 336775, 336831, 229346, 336884, 229254, 337038, 337029, 229211, 300055, 203695, 337121, 337144, 229076, 269578, 337165, 269613, 299987, 299950, 337239, 229015, 337254, 228987, 228945, 269669, 337334, 204139, 299703, 228796, 204208, 288061, 313729, 337702, 337744, 359732, 204343, 337925, 337903, 338024, 299515, 359625, 299475, 269578, 227820, 269988, 299439, 227731, 269594, 227575, 338262, 227486, 204468, 227485, 204505, 270091, 270148, 270093, 227083, 270187, 299129, 299135, 299117, 338712, 226967, 270268, 338895, 204564, 359436, 298976, 298972, 204627, 226664, 359320, 270630, 270747, 204739, 270771, 339699, 339755, 298503, 339747, 339792, 225985, 298458, 225953, 359206, 339862, 339912, 281325, 339952, 298305, 298289, 225717, 298277, 225686, 340090, 340128, 359085, 340298, 225233, 225194, 298139, 225073, 281276, 340507, 340546, 340525, 297471, 358894, 281210, 224537, 204970, 271347, 341029, 271384, 271404, 205099, 271398, 271440, 271490, 271520, 271530, 271561, 358714, 284896, 223679, 271613, 271615, 281036, 223549, 341848, 271710, 341847, 358654, 341949, 341957, 341971, 271767, 358645, 358546, 280980, 342080, 342106, 223249, 342151, 280896, 271767, 342268, 358196, 342270, 222790, 222819, 272153, 222601, 296978, 272013, 222511, 222457, 205411, 222182, 222245, 222015, 296783, 272368, 205458, 296755, 343100, 221925, 296650, 288794, 221824, 221804, 343358, 221691, 343366, 221687, 343457, 343491, 288808, 343466, 343457, 198079, 343675, 343684, 221378, 221287, 272814, 343852, 343869, 221154, 343968, 221001, 221037, 272949, 221001, 344034, 280755, 220887, 280634, 313127, 344327, 344363, 344380, 344503, 344630, 273301, 205568, 295749, 295736, 295731, 295670, 295626, 295593, 295579, 219851, 219815, 219618, 219604, 219519, 295402, 295387, 285087, 295287, 295224, 295161, 295110, 273949, 295128, 206198, 218888, 295017, 345562, 280439, 280426, 295005, 218781, 218744, 346211, 346313, 218461, 218322, 313111, 346721, 346722, 346365, 346762, 274172, 218025, 217980, 294553, 274585, 280270, 217805, 217707, 217678, 217645, 347242, 347235, 347156, 294216, 294171, 206512, 294138, 280172, 206539, 289307, 206532, 348037, 255813, 348122, 348120, 275073, 348175, 293916, 293905, 293900, 293882, 293814, 280127, 255797, 216008, 280114, 348964, 349192, 349251, 349256, 349280, 349369, 215458, 215421, 349410, 7074, 349460, 349442, 215213, 215144, 356972, 349724, 349742, 289496, 293254, 293256, 289452, 349904, 275944, 214814, 214809, 293114, 214584, 214688, 350120, 350240, 275944, 293007, 292988, 276203, 214136, 356785, 273949, 276253, 276319, 214017, 207521, 213985, 276383, 276472, 292536, 213637, 292676, 213638, 350991, 213480, 207592, 213045, 213333, 212902, 207662, 292265, 212614, 277210, 277018, 277260, 212429, 212429, 277211, 207829, 212401, 277309, 352089, 277351, 313062, 352117, 212263, 289770, 277319, 352177, 352266, 352234, 212124, 207867, 212089, 212028, 352415, 352433, 352472, 352471, 211958, 211958, 291828, 207889, 207896, 352592, 352618, 207888, 277710, 277732, 277783, 277814, 211567, 211477, 289845, 211448, 277857, 313036, 277869, 291415, 353028, 211143, 291413, 353131, 207889, 278039, 353224, 291387, 278075, 291340, 353342, 291286, 353491, 208056, 356091, 208124, 208119, 291080, 278362, 210353, 208184, 208193, 210123, 210079, 208263, 278488, 355875, 210020, 290819, 355933, 208325, 290602, 278649, 290061, 279374, 290645, 209415, 209389, 209354, 209304, 209281
+
+Task 4.2 results end
+
+
+
+
+Task 4.3 code begin
+
+
+hadoop jar /opt/hadoop/hadoop-2.7.1/share/hadoop/tools/lib/hadoop-streaming-2.7.1.jar -D mapreduce.job.name="Task 4.2" -D mapreduce.job.output.key.comparator.class=org.apache.hadoop.mapreduce.lib.partition.KeyFieldBasedComparator -D stream.num.map.output.key.fields=3 -D mapreduce.partition.keypartitioner.options=-k1,1 -D mapreduce.partition.keycomparator.options="-k1,1n -k2,2n" -input $DATA_PATH/task3/stackLarge.txt -output $OUTPUT_PATH/task_4.3_helper.out -mapper mapper.py -file mapper.py -reducer reducer.py -file reducer.py -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner
+
+mapper.py
+import sys
+import xml.etree.ElementTree as ET
+
+for line in sys.stdin:  # input from standard input
+    root = ET.fromstring(line.strip())
+    attrs = root.attrib
+    fID, fVAL, fView = '', '', ''
+    try:
+        fID = attrs['Id']
+        fVAL = attrs["PostTypeId"]
+    except KeyError:
+        continue 
+    if fVAL == '1':
+        try:
+            fView = attrs['AcceptedAnswerId']
+        except KeyError:
+            continue
+        print("{0}\t{1}\t{2}".format(fView, fVAL, fID))   
+    if fVAL == '2':
+        try:
+            fView = attrs['OwnerUserId']
+        except KeyError:
+            continue
+        print("{0}\t{1}\t{2}".format(fID, fVAL, fView))
+
+
+reducer.py
+import sys
+
+acceptedAnswerId = ''
+for line in sys.stdin:
+    AnsId, val, id_owner = line.strip().split()
+    if val == '1':
+        acceptedAnswerId = AnsId
+    elif val == '2' and AnsId == acceptedAnswerId:
+        print("{0}\t{1}".format(id_owner, AnsId))
+
+hadoop jar /opt/hadoop/hadoop-2.7.1/share/hadoop/tools/lib/hadoop-streaming-2.7.1.jar -D mapreduce.job.name="Task 4.2" -D mapreduce.job.output.key.comparator.class=org.apache.hadoop.mapreduce.lib.partition.KeyFieldBasedComparator -D stream.num.map.output.key.fields=2 -D mapreduce.partition.keypartitioner.options=-k1,1 -D mapreduce.partition.keycomparator.options="-k1,1n" -input $OUTPUT_PATH/task_4.3_helper.out -output $OUTPUT_PATH/task_4.3_helper1.out -mapper mapper.py -file mapper.py -reducer reducer.py -file reducer.py -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner
+
+mapper.py
+import sys
+
+for line in sys.stdin:
+    owner, ct = line.strip().split()
+    print('{0}\t{1}'.format(owner, ct))
+
+
+reducer.py
+import sys
+
+arr = []
+prevOwner = ''
+for line in sys.stdin:
+    owner, ans = line.strip().split()
+    
+    if owner == prevOwner:
+        arr.append(ans)
+    else:
+        if prevOwner != '':
+            print("{0}\t{1}\t{2}".format(prevOwner, len(arr), str(map(int, arr))))
+        prevOwner = owner
+        arr = [ans]
+print("{0}\t{1}\t{2}".format(prevOwner, len(arr), str(map(int, arr))))
+
+hadoop jar /opt/hadoop/hadoop-2.7.1/share/hadoop/tools/lib/hadoop-streaming-2.7.1.jar -D mapreduce.job.name="Task 4.2" -D mapreduce.job.reduces=1 -D mapreduce.job.output.key.comparator.class=org.apache.hadoop.mapreduce.lib.partition.KeyFieldBasedComparator -D stream.num.map.output.key.fields=3 -D mapreduce.partition.keypartitioner.options=-k1,1 -D mapreduce.partition.keycomparator.options="-k2,2nr" -input $OUTPUT_PATH/task_4.3_helper1.out -output $OUTPUT_PATH/task_4.3.out -mapper mapper.py -file mapper.py -reducer reducer.py -file reducer.py -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner
+
+mapper.py
+import sys
+
+for line in sys.stdin:
+    owner, ct, arr = line.strip().split('\t')
+    print('{0}\t{1}\t{2}'.format(owner, ct, arr))
+
+
+reducer.py
+import sys
+
+count = 0
+for line in sys.stdin:
+    if count == 0:
+        owner, ct, arr = line.strip().split('\t')
+        print("{0} -> {1}, {2}".format(owner, ct, arr.strip('[]')))
+    count += 1
+
+Task 4.3 code end
+
+Task 4.3 results begin
+
+22656 -> 1097, 460350, 532841, 465648, 613738, 532607, 362804, 338761, 510953, 242910, 650921, 464851, 302378, 362453, 594276, 511489, 243054, 304484, 304664, 204354, 626207, 434697, 304821, 197191, 305163, 305168, 626121, 299526, 531338, 489548, 533066, 489421, 337366, 489386, 556039, 207711, 241380, 402944, 595298, 208756, 495622, 533836, 209002, 240665, 433116, 439232, 496167, 512550, 423806, 244805, 636062, 263633, 534826, 212094, 378140, 439584, 308962, 605787, 648122, 198136, 239252, 388793, 439633, 630635, 212283, 266301, 519530, 420633, 188993, 259985, 400888, 212512, 353435, 463078, 213403, 568789, 213651, 187048, 259732, 414315, 596396, 186003, 377263, 333671, 246114, 258585, 295160, 570493, 377259, 570588, 257540, 469978, 348977, 183696, 457084, 524106, 454299, 549762, 293919, 446671, 293897, 236705, 549618, 246394, 218485, 536996, 573445, 257252, 257059, 530014, 483067, 430709, 499218, 375837, 317034, 450482, 178197, 219001, 406841, 284905, 597660, 256636, 499407, 470976, 453920, 374801, 657703, 246529, 640323, 606641, 457999, 640350, 525420, 640517, 254908, 235459, 647795, 285184, 576762, 223709, 360180, 586397, 235067, 291114, 577365, 545437, 169872, 330363, 450856, 578242, 538714, 154710, 233492, 407417, 286520, 290656, 225077, 290340, 362732, 396159, 346735, 641944, 344340, 620519, 344377, 585415, 618161, 264740, 542791, 251974, 619859, 410684, 656114, 580794, 642970, 580910, 477406, 288802, 609981, 324090, 232803, 371525, 324356, 581432, 227525, 581464, 654684, 474198, 474288, 161965, 227598, 427370, 582567, 370936, 600016, 325161, 503839, 644757, 644095, 654756, 626964, 229023, 540649, 352210, 474468, 583958, 474585, 370828, 370742, 327312, 370580, 618927, 398155, 556622, 520568, 321104, 655668, 608043, 383782, 277767, 151950, 574659, 259695, 204744, 461465, 384335, 384416, 188130, 190254, 190308, 639328, 655311, 353154, 239903, 300008, 289520, 298313, 298287, 384529, 349384, 462725, 396026, 349267, 443956, 490909, 577430, 533339, 232621, 316925, 435045, 443433, 532952, 652580, 186155, 261813, 519682, 638121, 414764, 208150, 225255, 275129, 644287, 325308, 300409, 300418, 289363, 443258, 346346, 582137, 395306, 346215, 325542, 620544, 519506, 483231, 394960, 464886, 483001, 464971, 346085, 620396, 355300, 225967, 399811, 256085, 263177, 280236, 465281, 326104, 443203, 234016, 465731, 493055, 481724, 400039, 508157, 200784, 627213, 508094, 657175, 552478, 481350, 213582, 344555, 573628, 439311, 225994, 552469, 493735, 344055, 579721, 493956, 164398, 234395, 400908, 466974, 541506, 272960, 313590, 375803, 455417, 141528, 597686, 281285, 255072, 393173, 292747, 495012, 343862, 343691, 182767, 560131, 446476, 154524, 264478, 272393, 330177, 542852, 446499, 542933, 162750, 343380, 605776, 229670, 598063, 657585, 330640, 217691, 646780, 234999, 413864, 543329, 585373, 221209, 229558, 254109, 612700, 647432, 605866, 271529, 436738, 229134, 293269, 253795, 360255, 570347, 566180, 253619, 428624, 592078, 528411, 295627, 217993, 342016, 252831, 391576, 411523, 516342, 341977, 333840, 451696, 302038, 503387, 589950, 270106, 476554, 302317, 527778, 309766, 374426, 609529, 524514, 468873, 524578, 431319, 516897, 362640, 631934, 569920, 341062, 653183, 374750, 265599, 336838, 293908, 631560, 340554, 210139, 337143, 295145, 227569, 285849, 266282, 504683, 390158, 570365, 390072, 578222, 266764, 251904, 389871, 339894, 629428, 375074, 651338, 614587, 205117, 651428, 237685, 514768, 516581, 651824, 629833, 286613, 139841, 590237, 294259, 286645, 198576, 156838, 460858, 329106, 271645, 396629, 534850, 506310, 607147, 308040, 490863, 631672, 591979, 396011, 398217, 535651, 309076, 302172, 590137, 535782, 221695, 164455, 631834, 554308, 488816, 302492, 231536, 274615, 619108, 533888, 164270, 619013, 552887, 204009, 326667, 459566, 552850, 201449, 221852, 352631, 640537, 146167, 589940, 445886, 300511, 536461, 305764, 462733, 620246, 589805, 367923, 454895, 269625, 643110, 632162, 367829, 288827, 487097, 659177, 630826, 446722, 268699, 565054, 537190, 268662, 344635, 232616, 372648, 204581, 268536, 299979, 606913, 271447, 338042, 519537, 533473, 290063, 271415, 173333, 366352, 241143, 366339, 656387, 453071, 447429, 290216, 507904, 586105, 633602, 651062, 344400, 277266, 262631, 585313, 336797, 608470, 533289, 197247, 299177, 215462, 606549, 528172, 320834, 567223, 214693, 329141, 658713, 305412, 657156, 436773, 329209, 208136, 436764, 279395, 208221, 653907, 555979, 161787, 270173, 333254, 388448, 196117, 411586, 456811, 466815, 481237, 183260, 412774, 449035, 413106, 435797, 618596, 549714, 263257, 626150, 605338, 627514, 568655, 597045, 311717, 312275, 569253, 479983, 370811, 556009, 509290, 531772, 569541, 370942, 245077, 569627, 261146, 292994, 283269, 520413, 371946, 642116, 318698, 658669, 649786, 610837, 635664, 293268, 254333, 386099, 635934, 531321, 385851, 336396, 623211, 512471, 570170, 419975, 317608, 448635, 657214, 638233, 340526, 605554, 628072, 498644, 314138, 642030, 510388, 342272, 648106, 316659, 270641, 293907, 556522, 648192, 294145, 265994, 316578, 622749, 373804, 618226, 448333, 213450, 188148, 278521, 598738, 241670, 188017, 186550, 186613, 264643, 654735, 359634, 187793, 638049, 627767, 265214, 528041, 295040, 426008, 252790, 295248, 295748, 252803, 600667, 187432, 359215, 648818, 626367, 612772, 573217, 358716, 427737, 314831, 227833, 358653, 511413, 349428, 487695, 271928, 313115, 421868, 614738, 612267, 503434, 583440, 486781, 627757, 440047, 564973, 417485, 213710, 182620, 178990, 314010, 615115, 309944, 309791, 586280, 485296, 315186, 209319, 208202, 308689, 644366, 385814, 339798, 339937, 385972, 610674, 506184, 340174, 221383, 221941, 340566, 438739, 306131, 334815, 305362, 334595, 423875, 458417, 507958, 634867, 206227, 569554, 460824, 589778, 557133, 645833, 186667, 229006, 186685, 168414, 570606, 424612, 229849, 230063, 481853, 464861, 555955, 300493, 625538, 646805, 300074, 481079, 511223, 204508, 647502, 233236, 346772, 233303, 333217, 388834, 480313, 233943, 648169, 436957, 480039, 512335, 436817, 163261, 238669, 239316, 239663, 618202, 550586, 479095, 348045, 296985, 241291, 161565, 161484, 242763, 350178, 514964, 478177, 547968, 319911, 244153, 619210, 244838, 392096, 352441, 372061, 595415, 427993, 200165, 516999, 157213, 419807, 246101, 545483, 573568, 371508, 632003, 545064, 200142, 475828, 247623, 153744, 428956, 434963, 491591, 574814, 356118, 448661, 576795, 639196, 191170, 403070, 430160, 191189, 286445, 370842, 253473, 254053, 324078, 359449, 255638, 255656, 454312, 473122, 256079, 600571, 434053, 495281, 538751, 538508, 409876, 361397, 656336, 472506, 601485, 282548, 261073, 601813, 409722, 453557, 362332, 536451, 144069, 524436, 577451, 281049, 194514, 493201, 280446, 280293, 141468, 280167, 364024, 263080, 194307, 535731, 453188, 624151, 624192, 452945, 327462, 624223, 534570, 277873, 604293, 399774, 493387, 265885, 325739, 657696, 533878, 276455, 493517, 605544, 605832, 366905, 269070, 193740, 527965, 468934, 192615, 273318, 351032, 466574, 365017, 439925, 197299, 564949, 564845, 439317, 527837, 162323, 162774, 195615, 566659, 315369, 233149, 442282, 317097, 442480, 520046, 309636, 197181, 654868, 177840, 309528, 531986, 496620, 309005, 444000, 242586, 521144, 323220, 323261, 577300, 427919, 245006, 649611, 533420, 533448, 314130, 324616, 324661, 533907, 425245, 305257, 424453, 304541, 580702, 580928, 581355, 330533, 176274, 420894, 510358, 448272, 585897, 586210, 586440, 534802, 253962, 254010, 201266, 302129, 413329, 301977, 333404, 201630, 588330, 411597, 480357, 590166, 255113, 409982, 641916, 312277, 591165, 255834, 336433, 516636, 640692, 337171, 406359, 313069, 557186, 453370, 640426, 405733, 258219, 258499, 638848, 593799, 298332, 258999, 493501, 555818, 340028, 594973, 261067, 399772, 222079, 538227, 262101, 493420, 538295, 477333, 296794, 296780, 395320, 394948, 341865, 221322, 342099, 263416, 393179, 392800, 295754, 265031, 295597, 265130, 457146, 343507, 343552, 490739, 475830, 343886, 552915, 193879, 602342, 313131, 266319, 266846, 267089, 219654, 267836, 474859, 293891, 388742, 388378, 388369, 474480, 268600, 523368, 293143, 523449, 386514, 164650, 386267, 551600, 269320, 385727, 269325, 349259, 631552, 540530, 349736, 291357, 540887, 182696, 182515, 271575, 380786, 460390, 514840, 352133, 472153, 352421, 272164, 460746, 234751, 353065, 177561, 379058, 513346, 272830, 144085, 378266, 144189, 462023, 610767, 288090, 462235, 287627, 611315, 355644, 543500, 355806, 208683, 287217, 375926, 287190, 356977, 612067, 612193, 626936, 503928, 209448, 276255, 359339, 285809, 214712, 371736, 285368, 468392, 285101, 615389, 277790, 145516, 181462, 362119, 146227, 362443, 618192, 283676, 283491, 211161, 363582, 618886, 363627, 513684, 619461, 280160, 620225, 282113, 281358
+
+Task 4.3 results end
+
